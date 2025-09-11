@@ -1,0 +1,10 @@
+Hi {{ booking.user.username }},
+
+Your booking #{{ booking.id }} has been cancelled.
+
+Refund: ₹{{ refund }}
+Penalty charged: ₹{{ penalty }}
+
+If you have any questions contact support.
+
+— ScootyGo Team

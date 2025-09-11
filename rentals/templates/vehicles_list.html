@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>Available Vehicles</h2>
+</div>
+
+<div id="vehicle-container" class="row g-3">
+  <!-- cards injected here -->
+</div>
+
+<!-- Booking modal -->
+<div class="modal fade" id="bookModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form id="bookingForm" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Book vehicle</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="modalVehicleId">
+        <div class="mb-3">
+          <label class="form-label">Start</label>
+          <input id="startPicker" class="form-control" required />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">End</label>
+          <input id="endPicker" class="form-control" required />
+        </div>
+        <div class="mb-3">
+          <div><strong>Total price:</strong> <span id="modalTotal">—</span></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-primary">Create booking</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let vehicles = [];
+const bookModalEl = document.getElementById('bookModal');
+const bsModal = new bootstrap.Modal(bookModalEl);
+
+// ✅ Flatpickr with minDate so user can’t pick past dates
+const startFP = flatpickr("#startPicker", { 
+  enableTime: true, 
+  dateFormat: "Y-m-d H:i",
+  minDate: "today"
+});
+const endFP = flatpickr("#endPicker", { 
+  enableTime: true, 
+  dateFormat: "Y-m-d H:i",
+  minDate: "today"
+});
+
+function isoFromFlatpickr(fp){
+  const d = fp.selectedDates[0];
+  return d ? d.toISOString() : null;
+}
+
+function computePriceFor(vehicle, startDate, endDate){
+  const ms = (endDate - startDate);
+  if(ms <= 0) return 0;
+  const hours = ms / 3600000.0;
+  const hoursRounded = Math.ceil(hours);
+  return (parseFloat(vehicle.price_per_hour) * hoursRounded).toFixed(2);
+}
+
+async function loadVehicles(){
+  const res = await fetch('/api/vehicles/');
+  if(!res.ok){ showAlert('Failed to load vehicles', 'danger'); return; }
+  vehicles = await res.json();
+  const c = document.getElementById('vehicle-container');
+  c.innerHTML = '';
+  vehicles.forEach(v => {
+    const img = (v.images && v.images.length) ? v.images[0].image : '';
+    const card = document.createElement('div');
+    card.className = 'col-md-4';
+    card.innerHTML = `
+      <div class="card h-100">
+        ${img ? `<img src="${img}" class="card-img-top">` : ''}
+        <div class="card-body d-flex flex-column">
+          <h5 class="card-title">${v.brand} ${v.model_name}</h5>
+          <p class="card-text small">${v.description || ''}</p>
+          <p class="mb-2"><strong>₹${v.price_per_hour} / hour</strong> • ₹${v.price_per_day} / day</p>
+          <div class="mt-auto">
+            <button class="btn btn-primary w-100" onclick="openBooking(${v.id})">Book</button>
+          </div>
+        </div>
+      </div>`;
+    c.appendChild(card);
+  });
+}
+
+function openBooking(vehicleId){
+  const vehicle = vehicles.find(v => v.id === vehicleId);
+  if(!vehicle) { showAlert('Vehicle not found', 'danger'); return; }
+  document.getElementById('modalVehicleId').value = vehicleId;
+
+  // default times: now + 1h and +4h
+  const now = new Date();
+  const start = new Date(now.getTime() + 60*60*1000);
+  const end = new Date(now.getTime() + 4*60*60*1000);
+  startFP.setDate(start);
+  endFP.setDate(end);
+
+  document.getElementById('modalTotal').innerText = computePriceFor(vehicle, start, end);
+  bsModal.show();
+}
+
+// ✅ recompute total when pickers change
+startFP.config.onChange.push(()=> updatePrice());
+endFP.config.onChange.push(()=> updatePrice());
+
+function updatePrice(){
+  const vid = parseInt(document.getElementById('modalVehicleId').value || '0');
+  const vehicle = vehicles.find(v => v.id === vid);
+  if(!vehicle) return;
+  const s = startFP.selectedDates[0], e = endFP.selectedDates[0];
+  if(s && e){
+    if(e <= s){
+      showAlert('End time must be after start time', 'danger');
+      endFP.clear();
+      document.getElementById('modalTotal').innerText = '—';
+      return;
+    }
+    document.getElementById('modalTotal').innerText = computePriceFor(vehicle, s, e);
+  }
+}
+
+// booking submit
+document.getElementById('bookingForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  if(!isLoggedIn()){ showAlert('Please login first', 'warning'); window.location='/login/'; return; }
+
+  const vehicleId = parseInt(document.getElementById('modalVehicleId').value);
+  const startIso = isoFromFlatpickr(startFP);
+  const endIso = isoFromFlatpickr(endFP);
+
+  try {
+    const resp = await fetchAuth('/api/bookings/', {
+      method: 'POST',
+      body: JSON.stringify({
+        vehicle: vehicleId,
+        start_time: startIso,
+        end_time: endIso
+      })
+    });
+    if(resp.ok){
+      const booking = await resp.json();
+      showAlert('Booking created (PENDING). Opening My Bookings.', 'success');
+      bsModal.hide();
+      setTimeout(()=> window.location='/my-bookings/', 700);
+    } else {
+      const err = await resp.json();
+      showAlert('Booking failed: ' + JSON.stringify(err), 'danger');
+    }
+  } catch (err){
+    console.error(err);
+    showAlert('Network error creating booking', 'danger');
+  }
+});
+
+document.addEventListener('DOMContentLoaded', loadVehicles);
+</script>
+{% endblock %}

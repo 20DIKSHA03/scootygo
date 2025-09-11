@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7 col-lg-6">
+    <h3>Create an account</h3>
+    <form id="registerForm" enctype="multipart/form-data">
+      <div class="mb-3">
+        <label class="form-label">Username</label>
+        <input class="form-control" name="username" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Email</label>
+        <input type="email" class="form-control" name="email" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Password</label>
+        <input type="password" class="form-control" name="password" required minlength="6">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Phone</label>
+        <input class="form-control" name="phone_number">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Driving license number</label>
+        <input class="form-control" name="driving_license_number">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Upload license document (image/pdf)</label>
+        <input type="file" class="form-control" name="license_doc" accept="image/*,application/pdf">
+      </div>
+
+      <button class="btn btn-primary" type="submit">Register</button>
+      <a class="btn btn-link" href="/login/">Already have account?</a>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.getElementById('registerForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  const form = e.target;
+  const fd = new FormData(form);
+
+  try {
+    const resp = await fetch('/api/auth/register/', {
+      method: 'POST',
+      body: fd
+    });
+    if(resp.ok){
+      showAlert('Registered successfully. Please login.', 'success');
+      setTimeout(()=> window.location = '/login/', 900);
+    } else {
+      const data = await resp.json();
+      console.error(data);
+      showAlert('Registration failed: ' + JSON.stringify(data), 'danger');
+    }
+  } catch (err){
+    console.error(err);
+    showAlert('Network error', 'danger');
+  }
+});
+</script>
+{% endblock %}

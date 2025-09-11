@@ -1,0 +1,153 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ScootyGo</title>
+
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <!-- flatpickr CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
+  <style>
+    body { padding-top: 70px; }
+    .card-img-top { height: 180px; object-fit: cover; }
+    .pointer { cursor: pointer; }
+  </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-light bg-light fixed-top shadow-sm">
+  <div class="container">
+    <a class="navbar-brand" href="/">ScootyGo</a>
+    <button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navmenu">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navmenu">
+      <ul class="navbar-nav me-auto">
+        <li class="nav-item"><a class="nav-link" href="/">Vehicles</a></li>
+        <li class="nav-item"><a class="nav-link" href="/my-bookings/">My Bookings</a></li>
+      </ul>
+      <ul class="navbar-nav ms-auto" id="nav-right">
+        <!-- Filled by JS -->
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<div class="container" id="page-container">
+  {% block content %}{% endblock %}
+</div>
+
+<!-- Global toast / alerts -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 2000;">
+  <div id="global-alert" class="toast align-items-center text-bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="3500" style="display:none;">
+    <div class="d-flex">
+      <div class="toast-body" id="global-alert-body"></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<!-- Bootstrap Bundle JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- flatpickr JS -->
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+<!-- Stripe.js (global) -->
+<script src="https://js.stripe.com/v3/"></script>
+
+<script>
+/* -------------------------------
+   Token helpers + fetch wrapper
+   ------------------------------- */
+function saveTokens(access, refresh){
+  localStorage.setItem('sg_access', access);
+  localStorage.setItem('sg_refresh', refresh);
+}
+function clearTokens(){
+  localStorage.removeItem('sg_access');
+  localStorage.removeItem('sg_refresh');
+}
+function getAccess(){ return localStorage.getItem('sg_access'); }
+function getRefresh(){ return localStorage.getItem('sg_refresh'); }
+function isLoggedIn(){ return !!getAccess(); }
+
+function showAlert(message, type='primary'){
+  const toast = document.getElementById('global-alert');
+  const body = document.getElementById('global-alert-body');
+  body.innerText = message;
+  toast.className = `toast align-items-center text-bg-${type} border-0`;
+  toast.style.display = 'block';
+  const bsToast = new bootstrap.Toast(toast);
+  bsToast.show();
+}
+
+/* fetch wrapper that auto-refreshes token on 401 */
+async function fetchAuth(url, opts = {}){
+  opts.headers = opts.headers || {};
+  const access = getAccess();
+  if(access) opts.headers['Authorization'] = `Bearer ${access}`;
+  if(!opts.headers['Content-Type'] && !(opts.body instanceof FormData)) {
+    opts.headers['Content-Type'] = 'application/json';
+  }
+
+  let res = await fetch(url, opts);
+  if(res.status === 401 && getRefresh()){
+    const refresh = getRefresh();
+    const r = await fetch('/api/token/refresh/', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ refresh })
+    });
+    if(r.ok){
+      const data = await r.json();
+      saveTokens(data.access, refresh);
+      opts.headers['Authorization'] = `Bearer ${data.access}`;
+      res = await fetch(url, opts); // retry
+    } else {
+      clearTokens();
+      updateNav();
+      showAlert('Session expired. Please login again.', 'warning');
+      return res;
+    }
+  }
+  return res;
+}
+
+/* navbar update */
+function updateNav(){
+  const nav = document.getElementById('nav-right');
+  nav.innerHTML = '';
+  if(isLoggedIn()){
+    const profileLi = document.createElement('li');
+    profileLi.className = 'nav-item';
+    profileLi.innerHTML = `<a class="nav-link" href="/profile/">Profile</a>`;
+    const logoutLi = document.createElement('li');
+    logoutLi.className = 'nav-item';
+    logoutLi.innerHTML = `<a class="nav-link pointer" onclick="onLogout()">Logout</a>`;
+    nav.appendChild(profileLi);
+    nav.appendChild(logoutLi);
+  } else {
+    nav.innerHTML = `
+      <li class="nav-item"><a class="nav-link" href="/login/">Login</a></li>
+      <li class="nav-item"><a class="nav-link" href="/register/">Register</a></li>`;
+  }
+}
+
+function onLogout(){
+  clearTokens();
+  updateNav();
+  showAlert('Logged out','success');
+  window.location = '/';
+}
+
+document.addEventListener('DOMContentLoaded', updateNav);
+</script>
+
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

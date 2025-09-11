@@ -1,0 +1,12 @@
+Hello {{ booking.user.username }},
+
+Thanks for booking with ScootyGo! We received your booking #{{ booking.id }}.
+
+Vehicle: {{ booking.vehicle.brand }} {{ booking.vehicle.model_name }}
+Start: {{ booking.start_time }}
+End: {{ booking.end_time }}
+Amount: ₹{{ booking.total_price }}
+
+We will notify you when payment is confirmed.
+
+— ScootyGo Team

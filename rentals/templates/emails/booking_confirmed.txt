@@ -1,0 +1,11 @@
+Hi {{ booking.user.username }},
+
+Your booking #{{ booking.id }} is confirmed.
+
+Vehicle: {{ booking.vehicle.brand }} {{ booking.vehicle.model_name }}
+Start: {{ booking.start_time }}
+End: {{ booking.end_time }}
+Amount paid: ₹{{ booking.total_price }}
+
+Have a safe ride!
+— ScootyGo Team

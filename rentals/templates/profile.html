@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>My Profile</h2>
+<div class="row">
+  <div class="col-md-8">
+    <form id="profileForm">
+      <div class="mb-3">
+        <label class="form-label">Username</label>
+        <input class="form-control" name="username" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Email</label>
+        <input class="form-control" name="email" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Phone</label>
+        <input class="form-control" name="phone_number" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Driving license number</label>
+        <input class="form-control" name="driving_license_number" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Upload license document</label>
+        <input type="file" class="form-control" name="license_doc" accept="image/*,application/pdf">
+      </div>
+      <button class="btn btn-primary" type="submit">Save</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function loadProfile(){
+  if(!isLoggedIn()){ showAlert('Login to access profile', 'warning'); window.location='/login/'; return; }
+  const res = await fetchAuth('/api/auth/profile/');
+  if(!res.ok){ showAlert('Could not load profile','danger'); return; }
+  const d = await res.json();
+  const form = document.getElementById('profileForm');
+  form.username.value = d.username || '';
+  form.email.value = d.email || '';
+  form.phone_number.value = d.phone_number || '';
+  form.driving_license_number.value = d.driving_license_number || '';
+}
+document.getElementById('profileForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  const form = e.target;
+  const fd = new FormData();
+  ['username','email','phone_number','driving_license_number'].forEach(k=>{
+    fd.append(k, form[k].value);
+  });
+  if(form.license_doc.files.length) fd.append('license_doc', form.license_doc.files[0]);
+
+  const res = await fetchAuth('/api/auth/profile/', {
+    method: 'PUT',
+    body: fd
+  });
+  if(res.ok){
+    showAlert('Profile updated', 'success');
+  } else {
+    const err = await res.json();
+    showAlert('Update failed: ' + JSON.stringify(err), 'danger');
+  }
+});
+
+document.addEventListener('DOMContentLoaded', loadProfile);
+</script>
+{% endblock %}

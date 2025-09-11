@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="mb-3">My Bookings</h2>
+
+<div id="bookings-feedback"></div>
+
+<table class="table table-striped" id="bookings-table">
+  <thead>
+    <tr>
+      <th>Vehicle</th>
+      <th>Start</th>
+      <th>End</th>
+      <th>Price</th>
+      <th>Status</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody id="bookings-body">
+    <!-- filled by JS -->
+  </tbody>
+</table>
+
+<nav>
+  <ul class="pagination" id="bookings-pagination"></ul>
+</nav>
+
+<!-- Payment modal or section can be added here if needed -->
+<!-- Stripe Card Element Container -->
+<div id="card-element" style="margin-top: 20px; max-width: 400px;"></div>
+
+{% endblock %}
+
+{% block scripts %}
+
+<script>
+
+  function authFetch(url, options={}) {
+    options.headers = options.headers || {};
+    const token = localStorage.getItem('access');
+    if (token) {
+        options.headers['Authorization'] = 'Bearer ' + token;
+    }
+    return fetch(url, options);
+}
+
+const BOOKINGS_PAGE_SIZE = 8;
+let CURRENT_PAGE = 1;
+let TOTAL_PAGES = 1;
+
+// Initialize Stripe globally once
+const stripe = Stripe('pk_test_51S5WelCs0MpeonbBSe6xYYyOsfSxQVSJD6lShtluyb77UUQya5CyDbklTHr9VJIVZetIOuJ1Z7lLqF7ygw6mnA4i001XF6iiox');  // Replace with your Stripe publishable key
+const elements = stripe.elements();
+const cardElement = elements.create('card');
+let currentBookingId = null;
+
+async function loadBookings(page=1){
+  if(!isLoggedIn()){ 
+    document.getElementById('bookings-feedback').innerHTML = '<div class="alert alert-warning">Please login to see your bookings.</div>'; 
+    return; 
+  }
+  CURRENT_PAGE = page;
+  const res = await authFetch(`/api/bookings/?page=${page}`);
+  if(!res.ok){
+    const j = await res.json();
+    document.getElementById('bookings-feedback').innerHTML = `<div class="alert alert-danger">Failed: ${JSON.stringify(j)}</div>`;
+    return;
+  }
+  const data = await res.json();
+
+  let items = data;
+  if(data.results) {
+    items = data.results;
+    if(data.count !== undefined){
+      TOTAL_PAGES = Math.ceil(data.count / BOOKINGS_PAGE_SIZE);
+    }
+  } else {
+    items = data;
+    TOTAL_PAGES = Math.max(1, Math.ceil(items.length / BOOKINGS_PAGE_SIZE));
+    const start = (page-1)*BOOKINGS_PAGE_SIZE;
+    items = items.slice(start, start+BOOKINGS_PAGE_SIZE);
+  }
+  renderBookings(items);
+  setupCountdowns(items);
+  renderPagination();
+}
+
+function computePenalty(b){
+  const now = new Date();
+  const start = new Date(b.start_time);
+  const diffHours = (start - now) / (1000*60*60);
+  const isLate = diffHours <= 24;
+  const penalty = isLate ? (Number(b.total_price) * 0.20) : 0;
+  return {isLate, penalty};
+}
+
+function renderBookings(items){
+  const tbody = document.getElementById("bookings-body");
+  tbody.innerHTML = "";
+  
+  if(items.length === 0){
+    tbody.innerHTML = '<tr><td colspan="6"><div class="alert alert-info">No bookings yet.</div></td></tr>';
+    return;
+  }
+
+  items.forEach(b => {
+    const penaltyInfo = computePenalty(b);
+    
+    let actionButtons = '';
+    if (b.status === 'PENDING' || b.status === 'CONFIRMED') {
+      actionButtons += `<button class="btn btn-sm btn-danger" onclick="cancelBooking(${b.id})">Cancel</button> `;
+    }
+    if (b.status === 'PENDING') {
+      actionButtons += `<button class="btn btn-sm btn-primary" onclick="startStripePayment(${b.id})">Pay Now</button>`;
+    }
+
+    tbody.innerHTML += `
+      <tr>
+        <td>${b.vehicle_name || b.vehicle_display || b.vehicle || 'Vehicle #' + b.vehicle}</td>
+        <td>
+          ${new Date(b.start_time).toLocaleString()}
+          <div id="countdown-${b.id}" class="small text-muted"></div>
+        </td>
+        <td>${new Date(b.end_time).toLocaleString()}</td>
+        <td>₹${b.total_price}
+          ${penaltyInfo.penalty > 0 ? `
+            <br><small class="text-warning">
+              Penalty if late: ₹${penaltyInfo.penalty.toFixed(2)}
+            </small>` : ""}
+        </td>
+        <td>${b.status}</td>
+        <td>${actionButtons}</td>
+      </tr>`;
+  });
+  setupCountdowns(items);
+}
+
+function setupCountdowns(items){
+  items.forEach(b => {
+    const el = document.getElementById(`countdown-${b.id}`);
+    if(!el) return;
+
+    function tick(){
+      const now = new Date();
+      const start = new Date(b.start_time);
+      const diff = start - now;
+      if(diff <= 0){
+        el.innerText = "Started";
+        clearInterval(interval);
+        return;
+      }
+      const hrs = Math.floor(diff / (1000*60*60));
+      const mins = Math.floor((diff % (1000*60*60)) / (1000*60));
+      el.innerText = `${hrs}h ${mins}m until start`;
+    }
+
+    tick();
+    let interval = setInterval(tick, 60*1000);
+  });
+}
+
+function computePenalty(b){
+  const now = new Date();
+  const start = new Date(b.start_time);
+  const diffHours = (start - now) / (1000*60*60);
+  const isLate = diffHours <= 24;
+  const penalty = isLate ? (Number(b.total_price) * 0.20) : 0;
+  return {isLate, penalty};
+}
+
+function renderPagination(){
+  const pag = document.getElementById('bookings-pagination');
+  pag.innerHTML = '';
+  for(let p=1;p<=TOTAL_PAGES;p++){
+    const li = document.createElement('li');
+    li.className = 'page-item ' + (p===CURRENT_PAGE ? 'active' : '');
+    li.innerHTML = `<a class="page-link" href="#" onclick="loadBookings(${p}); return false;">${p}</a>`;
+    pag.appendChild(li);
+  }
+}
+
+async function cancelBooking(id){
+  if(!confirm('Are you sure you want to cancel this booking?')) return;
+  const res = await authFetch(`/api/bookings/${id}/cancel/`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({})
+  });
+  if(res.ok){
+    const j = await res.json();
+    alert('Cancelled: ' + (j.detail || '') + (j.refund ? `\nRefund: ${JSON.stringify(j.refund)}` : ''));
+    loadBookings(CURRENT_PAGE);
+  } else {
+    const j = await res.json();
+    alert('Cancel failed: ' + JSON.stringify(j));
+  }
+}
+
+// -------- Stripe payment integration --------
+async function startStripePayment(bookingId) {
+  currentBookingId = bookingId;
+
+  // Create PaymentIntent via backend
+  const res = await authFetch(`/api/payments/stripe/create/${bookingId}/`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ currency: 'inr' })
+  });
+  const data = await res.json();
+  if(!res.ok || !data.client_secret){
+    alert('Failed to initiate payment: ' + (data.detail || JSON.stringify(data)));
+    return;
+  }
+
+  // Show a prompt/modal here if you have one (optional)
+  // Mount card element if not already mounted
+  if (!document.getElementById('card-element').children.length) {
+    cardElement.mount('#card-element');
+  }
+
+  // Confirm card payment
+  const result = await stripe.confirmCardPayment(data.client_secret, {
+    payment_method: {
+      card: cardElement,
+      billing_details: { name: 'Customer Name' } // Replace with actual user name if available
+    }
+  });
+
+  if(result.error){
+    alert('Payment failed: ' + result.error.message);
+  } else if(result.paymentIntent && result.paymentIntent.status === 'succeeded') {
+    alert('Payment successful! Booking confirmed.');
+    loadBookings(CURRENT_PAGE);
+  }
+}
+
+loadBookings(1);
+</script>
+
+<!-- Add this div in your bookings page template to mount the card -->
+<div id="card-element" style="margin-top: 20px; max-width: 400px;"></div>
+
+{% load static %}
+<script src="{% static 'js/stripe_payment.js' %}"></script>
+
+{% endblock %}

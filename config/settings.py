@@ -139,13 +139,12 @@ STRIPE_WEBHOOK_SECRET = env('STRIPE_WEBHOOK_SECRET', default='whsec_xxx')
 
 # Email (example using Gmail SMTP; replace with real SMTP or use Anymail + provider)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_USE_SSL = False
-
-EMAIL_HOST_USER = 'dikshaproject2025@gmail.com'
-EMAIL_HOST_PASSWORD = 'jugmausaljvydb ev'
+EMAIL_HOST = env('EMAIL_HOST', default='smtp-relay.brevo.com')
+EMAIL_PORT = env.int('EMAIL_PORT', default=587)
+EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
+EMAIL_HOST_USER = env('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER)
 
 # 🚀 Force sender address to always be Gmail
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER

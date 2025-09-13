@@ -100,13 +100,7 @@ async function cancelBooking(bookingId){
 
   try {
     const res = await fetchAuth(`/api/bookings/${bookingId}/cancel/`, { method: 'POST' });
-
-    let data;
-    try {
-      data = await res.json();   // JSON normally
-    } catch {
-      data = { detail: await res.text() }; // fallback to raw text
-    }
+    const data = await res.json();  // ✅ only parse once
 
     if(res.ok){
       let msg = 'Booking cancelled.';
@@ -114,7 +108,7 @@ async function cancelBooking(bookingId){
         msg += ` Refund: ₹${data.refund.refunded} (Penalty: ₹${data.refund.penalty || 0})`;
       }
       showAlert(msg, 'info');
-      loadMyBookings();
+      await loadMyBookings();  // ✅ refresh list
     } else {
       showAlert('Cancellation failed: ' + (data.detail || JSON.stringify(data)), 'danger');
     }

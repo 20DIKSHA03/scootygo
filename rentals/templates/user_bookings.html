@@ -96,11 +96,19 @@ async function startStripeCheckout(bookingId){
 }
 
 async function cancelBooking(bookingId){
-  if(!confirm('Are you sure you want to cancel this booking?')) return;
+  console.log("Cancel clicked for booking", bookingId);   // debug
+
+  if(!confirm('Are you sure you want to cancel this booking?')) {
+    console.log("User aborted cancel"); 
+    return;
+  }
 
   try {
+    console.log("Sending cancel request...");
     const res = await fetchAuth(`/api/bookings/${bookingId}/cancel/`, { method: 'POST' });
-    const data = await res.json();  // ✅ only parse once
+
+    console.log("Cancel response:", res);
+    const data = await res.json();
 
     if(res.ok){
       let msg = 'Booking cancelled.';
@@ -108,12 +116,12 @@ async function cancelBooking(bookingId){
         msg += ` Refund: ₹${data.refund.refunded} (Penalty: ₹${data.refund.penalty || 0})`;
       }
       showAlert(msg, 'info');
-      await loadMyBookings();  // ✅ refresh list
+      loadMyBookings();
     } else {
       showAlert('Cancellation failed: ' + (data.detail || JSON.stringify(data)), 'danger');
     }
   } catch(e){
-    console.error(e);
+    console.error("Cancel error:", e);
     showAlert('Error cancelling booking: ' + e.message, 'danger');
   }
 }

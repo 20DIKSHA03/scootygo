@@ -71,11 +71,17 @@ function computePriceFor(vehicle, startDate, endDate){
 }
 
 async function loadVehicles(){
-  const res = await fetch('/api/vehicles/');
-  if(!res.ok){ showAlert('Failed to load vehicles', 'danger'); return; }
+  // 🚀 Always fetch fresh data (no caching)
+  const res = await fetch('/api/vehicles/', { cache: "no-store" });
+  if(!res.ok){ 
+    showAlert('Failed to load vehicles', 'danger'); 
+    return; 
+  }
   vehicles = await res.json();
+
   const c = document.getElementById('vehicle-container');
   c.innerHTML = '';
+
   vehicles.forEach(v => {
     const div = document.createElement('div');
     div.className = 'col-md-4';
@@ -98,7 +104,10 @@ async function loadVehicles(){
 
 function openBooking(vehicleId){
   const vehicle = vehicles.find(v => v.id === vehicleId);
-  if(!vehicle) { showAlert('Vehicle not found', 'danger'); return; }
+  if(!vehicle) { 
+    showAlert('Vehicle not found', 'danger'); 
+    return; 
+  }
   document.getElementById('modalVehicleId').value = vehicleId;
 
   // Default booking times: now +1h and +4h
@@ -135,7 +144,11 @@ function updatePrice(){
 // Booking submit handler
 document.getElementById('bookingForm').addEventListener('submit', async function(e){
   e.preventDefault();
-  if(!isLoggedIn()){ showAlert('Please login first', 'warning'); window.location='/login/'; return; }
+  if(!isLoggedIn()){ 
+    showAlert('Please login first', 'warning'); 
+    window.location='/login/'; 
+    return; 
+  }
 
   const vehicleId = parseInt(document.getElementById('modalVehicleId').value);
   const startIso = isoFromFlatpickr(startFP);
@@ -146,7 +159,7 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
-        vehicle: vehicleId,   // ✅ correct ID from API
+        vehicle: vehicleId,   // ✅ correct ID from API (fresh)
         start_time: startIso,
         end_time: endIso
       })

@@ -24,7 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = env('SECRET_KEY', default='dev-secret-key')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env.bool('DEBUG', default=True)
+DEBUG = env.bool('DEBUG', default=False)
 
 ALLOWED_HOSTS = ["scootygo.onrender.com", "localhost", "127.0.0.1"]
 
@@ -153,3 +153,4 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 # Optional: debug email to console for dev
 # EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 STATIC_ROOT = BASE_DIR / "staticfiles"
+

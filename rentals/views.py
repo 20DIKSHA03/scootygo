@@ -96,21 +96,31 @@ class BookingViewSet(viewsets.ModelViewSet):
     def cancel(self, request, pk=None):
         """
         Cancel a booking (user or admin).
+        Rules:
+         - Only owner (or admin) can cancel.
+         - Booking must be PENDING or CONFIRMED.
+         - If start_time already passed → cannot cancel.
+         - If within 24h of start_time → penalty (20%).
         """
         try:
             booking = Booking.objects.get(pk=pk)
         except Booking.DoesNotExist:
             return Response({"detail": "Booking not found."}, status=status.HTTP_404_NOT_FOUND)
 
+        # permissions
         if not (request.user == booking.user or request.user.is_staff):
             return Response({"detail": "Not allowed."}, status=status.HTTP_403_FORBIDDEN)
 
-        if booking.status in ['CANCELLED', 'COMPLETED']:
-            return Response({"detail": "Booking cannot be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
+        if booking.status == 'CANCELLED':
+            return Response({"detail": "Booking already cancelled."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if booking.end_time < timezone.now():
+            return Response({"detail": "Past bookings cannot be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
 
         if booking.status not in ['PENDING', 'CONFIRMED']:
             return Response({"detail": "Only PENDING or CONFIRMED bookings can be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # check late cancellation
         now = timezone.now()
         time_diff = booking.start_time - now
         late_threshold = timezone.timedelta(hours=24)
@@ -136,6 +146,7 @@ class BookingViewSet(viewsets.ModelViewSet):
         booking.status = "CANCELLED"
         booking.save()
 
+        # send cancellation email
         send_booking_cancelled_email(booking, refund_info.get("refunded"))
 
         return Response({
@@ -143,7 +154,6 @@ class BookingViewSet(viewsets.ModelViewSet):
             "late_cancel": late,
             "refund": refund_info
         })
-
 
 # -------------------------
 # Mock Payment (testing only)

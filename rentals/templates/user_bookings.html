@@ -100,7 +100,13 @@ async function cancelBooking(bookingId){
 
   try {
     const res = await fetchAuth(`/api/bookings/${bookingId}/cancel/`, { method: 'POST' });
-    const data = await res.json();
+
+    let data;
+    try {
+      data = await res.json();   // JSON normally
+    } catch {
+      data = { detail: await res.text() }; // fallback to raw text
+    }
 
     if(res.ok){
       let msg = 'Booking cancelled.';

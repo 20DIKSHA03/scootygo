@@ -154,3 +154,9 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 # EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# Domain handling
+DOMAIN = env('DOMAIN', default='http://localhost:8000')
+
+# Ensure DOMAIN always has a scheme
+if not DOMAIN.startswith("http"):
+    DOMAIN = "https://" + DOMAIN

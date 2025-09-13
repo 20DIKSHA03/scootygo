@@ -233,32 +233,37 @@ def stripe_webhook(request):
 
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-    except ValueError:
+    except Exception as e:
+        print(f"Webhook error: {e}")
         return HttpResponse(status=400)
-    except stripe.error.SignatureVerificationError:
-        return HttpResponse(status=400)
+
+    print(f"Stripe event received: {event['type']}")
 
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
         booking_id = session.get('metadata', {}).get('booking_id')
         payment_id = session.get('metadata', {}).get('payment_id')
+        print(f"Metadata booking_id={booking_id}, payment_id={payment_id}")
 
         try:
             payment = Payment.objects.get(pk=payment_id)
             booking = payment.booking
+            print(f"Payment and booking found: Payment ID {payment.id}, Booking ID {booking.id}")
+
             payment.status = 'SUCCESS'
             payment.transaction_id = session.get('payment_intent')
             payment.save()
+
             booking.status = 'CONFIRMED'
             booking.save()
 
             send_booking_confirmation_email(booking)
+            print(f"Booking confirmed and email sent for booking ID {booking.id}")
 
         except Payment.DoesNotExist:
-            pass
+            print(f"Payment with ID {payment_id} does not exist")
 
     return HttpResponse(status=200)
-
 
 # -------------------------
 # Admin: list all bookings

@@ -123,6 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(window.location.search);
   if(params.get('payment') === 'success'){
     showAlert('Payment successful! Your booking is confirmed.', 'success');
+    loadMyBookings(); 
     window.history.replaceState({}, document.title, window.location.pathname);
   }
   if(params.get('payment') === 'cancel'){

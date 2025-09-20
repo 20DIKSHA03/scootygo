@@ -92,74 +92,68 @@ class BookingViewSet(viewsets.ModelViewSet):
             booking = serializer.save(user=user, total_price=total_price, status='PENDING')
             Payment.objects.create(booking=booking, amount=total_price, status='PENDING')
 
-@action(detail=True, methods=['POST'])
-def cancel(self, request, pk=None):
-    """
-    Cancel a booking (user or admin).
-    """
-    try:
-        booking = Booking.objects.get(pk=pk)
-    except Booking.DoesNotExist:
-        return Response({"detail": "Booking not found."}, status=status.HTTP_404_NOT_FOUND)
-
-    # permissions
-    if not (request.user == booking.user or request.user.is_staff):
-        return Response({"detail": "Not allowed."}, status=status.HTTP_403_FORBIDDEN)
-
-    if booking.status == 'CANCELLED':
-        # still send cancellation mail so user gets notified
+    @action(detail=True, methods=['POST'])
+    def cancel(self, request, pk=None):
+        """
+        Cancel a booking (user or admin).
+        """
         try:
-            send_booking_cancelled_email(booking, None)
-            print(f"📧 Cancel email resent for already cancelled booking {booking.id}")
+            booking = Booking.objects.get(pk=pk)
+        except Booking.DoesNotExist:
+            return Response({"detail": "Booking not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # permissions
+        if not (request.user == booking.user or request.user.is_staff):
+            return Response({"detail": "Not allowed."}, status=status.HTTP_403_FORBIDDEN)
+
+        if booking.status == 'CANCELLED':
+            return Response({"detail": "Booking already cancelled."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if booking.end_time < timezone.now():
+            return Response({"detail": "Past bookings cannot be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if booking.status not in ['PENDING', 'CONFIRMED']:
+            return Response({"detail": "Only PENDING or CONFIRMED bookings can be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # check late cancellation
+        now = timezone.now()
+        time_diff = booking.start_time - now
+        late_threshold = timezone.timedelta(hours=24)
+        late = time_diff <= late_threshold
+
+        refund_info = {"refunded": 0, "penalty": 0}
+        payment = getattr(booking, "payment", None)
+
+        if payment and payment.status == "SUCCESS":
+            penalty = 0
+            refund_amount = float(payment.amount)
+            if late:
+                penalty = refund_amount * 0.20
+                refund_amount -= penalty
+
+            payment.status = "REFUNDED"
+            payment.refund_amount = refund_amount
+            payment.refund_id = f"MOCKREF-{payment.id}-{int(time.time())}"
+            payment.save()
+
+            refund_info = {"refunded": refund_amount, "penalty": penalty}
+
+        booking.status = "CANCELLED"
+        booking.save()
+
+        # 🔹 Debug log before sending email
+        print(f"📧 Attempting to send cancellation email to {booking.user.email}")
+        try:
+            send_booking_cancelled_email(booking, refund_info.get("refunded"))
+            print("✅ Cancel email sent successfully")
         except Exception as e:
-            print(f"❌ Cancel email error (already cancelled): {e}")
-        return Response({"detail": "Booking already cancelled."}, status=status.HTTP_400_BAD_REQUEST)
+            print(f"❌ Cancel email error: {e}")
 
-    if booking.end_time < timezone.now():
-        return Response({"detail": "Past bookings cannot be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
-
-    if booking.status not in ['PENDING', 'CONFIRMED']:
-        return Response({"detail": "Only PENDING or CONFIRMED bookings can be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
-
-    # check late cancellation
-    now = timezone.now()
-    time_diff = booking.start_time - now
-    late_threshold = timezone.timedelta(hours=24)
-    late = time_diff <= late_threshold
-
-    refund_info = {"refunded": 0, "penalty": 0}
-    payment = getattr(booking, "payment", None)
-
-    if payment and payment.status == "SUCCESS":
-        penalty = 0
-        refund_amount = float(payment.amount)
-        if late:
-            penalty = refund_amount * 0.20
-            refund_amount -= penalty
-
-        payment.status = "REFUNDED"
-        payment.refund_amount = refund_amount
-        payment.refund_id = f"MOCKREF-{payment.id}-{int(time.time())}"
-        payment.save()
-
-        refund_info = {"refunded": refund_amount, "penalty": penalty}
-
-    booking.status = "CANCELLED"
-    booking.save()
-
-    # 🔹 Debug log before sending email
-    print(f"📧 Attempting to send cancellation email to {booking.user.email}")
-    try:
-        send_booking_cancelled_email(booking, refund_info.get("refunded"))
-        print("✅ Cancel email sent successfully")
-    except Exception as e:
-        print(f"❌ Cancel email error: {e}")
-
-    return Response({
-        "detail": "Booking cancelled.",
-        "late_cancel": late,
-        "refund": refund_info
-    })
+        return Response({
+            "detail": "Booking cancelled.",
+            "late_cancel": late,
+            "refund": refund_info
+        })
 
 # -------------------------
 # Mock Payment (testing only)

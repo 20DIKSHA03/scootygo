@@ -149,11 +149,14 @@ class BookingViewSet(viewsets.ModelViewSet):
         # send cancellation email
         send_booking_cancelled_email(booking, refund_info.get("refunded"))
 
-        return Response({
-            "detail": "Booking cancelled.",
-            "late_cancel": late,
-            "refund": refund_info
-        })
+        # send cancellation email with debug
+        try:
+            print("📧 Sending cancellation email to:", booking.user.email)
+            send_booking_cancelled_email(booking, refund_info.get("refunded"))
+            print("✅ Cancel email sent")
+        except Exception as e:
+            print("❌ Cancel email error:", e)
+
 
 # -------------------------
 # Mock Payment (testing only)

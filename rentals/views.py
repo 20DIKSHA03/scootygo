@@ -96,11 +96,6 @@ class BookingViewSet(viewsets.ModelViewSet):
     def cancel(self, request, pk=None):
         """
         Cancel a booking (user or admin).
-        Rules:
-         - Only owner (or admin) can cancel.
-         - Booking must be PENDING or CONFIRMED.
-         - If start_time already passed → cannot cancel.
-         - If within 24h of start_time → penalty (20%).
         """
         try:
             booking = Booking.objects.get(pk=pk)
@@ -146,17 +141,19 @@ class BookingViewSet(viewsets.ModelViewSet):
         booking.status = "CANCELLED"
         booking.save()
 
-        # send cancellation email
-        send_booking_cancelled_email(booking, refund_info.get("refunded"))
-
-        # send cancellation email with debug
+        # 🔹 Debug log before sending email
+        print(f"📧 Attempting to send cancellation email to {booking.user.email}")
         try:
-            print("📧 Sending cancellation email to:", booking.user.email)
             send_booking_cancelled_email(booking, refund_info.get("refunded"))
-            print("✅ Cancel email sent")
+            print("✅ Cancel email sent successfully")
         except Exception as e:
-            print("❌ Cancel email error:", e)
+            print(f"❌ Cancel email error: {e}")
 
+        return Response({
+            "detail": "Booking cancelled.",
+            "late_cancel": late,
+            "refund": refund_info
+        })
 
 # -------------------------
 # Mock Payment (testing only)
